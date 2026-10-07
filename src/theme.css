@@ -1,0 +1,48 @@
+/* CyberAkshak Admin — visual upgrade. Import AFTER styles.css (see steps). */
+:root {
+  --accent: #22d3ee;
+  --bg: #f4f5fb;
+  --shadow: 0 1px 2px rgba(20, 24, 60, .05), 0 10px 30px rgba(20, 24, 60, .07);
+}
+body { background: radial-gradient(900px 400px at 100% -10%, #e4e6ff 0%, transparent 60%), var(--bg); }
+
+/* Sidebar */
+.side { background: linear-gradient(180deg, #151a45 0%, #0e1130 100%); border-right: 1px solid rgba(255,255,255,.06); }
+.side-brand { color: var(--accent); }
+.side-brand svg { filter: drop-shadow(0 0 8px rgba(34,211,238,.55)); }
+.side nav button { display: flex; align-items: center; gap: 10px; position: relative; }
+.side nav button svg { opacity: .8; flex: none; }
+.side nav button.on { background: linear-gradient(90deg, rgba(122,108,245,.35), rgba(122,108,245,.08)); }
+.side nav button.on::before { content: ""; position: absolute; left: -14px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.side-foot { border-top: 1px solid rgba(255,255,255,.08); padding-top: 14px; }
+
+/* Page header */
+.page-head h1 { background: linear-gradient(90deg, var(--ink), var(--brand)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.btn.primary { background: linear-gradient(135deg, var(--brand), var(--brand-light)); border: 0; box-shadow: 0 6px 16px rgba(75,79,224,.3); }
+.btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, #3f43cc, #6a5bea); transform: translateY(-1px); }
+
+/* Stat cards */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px 18px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.stat::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--tone); }
+.stat span { font-size: 12.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.stat strong { display: block; font-size: 30px; font-weight: 800; letter-spacing: -.02em; margin-top: 2px; }
+.stat.green { --tone: var(--green); } .stat.brand { --tone: var(--brand); }
+.stat.orange { --tone: #e8920c; } .stat.gray { --tone: #a3a7c2; }
+
+/* Event list */
+.row { transition: background .15s; }
+.row:hover { background: #fafaff; }
+.thumb { width: 72px; height: 48px; border-radius: 12px; box-shadow: 0 2px 8px rgba(20,24,60,.12); }
+.row-text strong { font-size: 15.5px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.coming { background: var(--brand-soft); color: var(--brand); }
+.pill.ongoing { background: var(--green-soft); color: var(--green); }
+.pill.ongoing::before { box-shadow: 0 0 0 3px rgba(18,148,111,.2); }
+
+/* Login */
+.login { background: radial-gradient(700px 500px at 20% 0%, #2b2f8f 0%, transparent 60%), linear-gradient(160deg, #151a45, #0e1130); }
+.login-card { border-radius: 22px; box-shadow: 0 30px 80px rgba(0,0,0,.4); }
+
+@media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
