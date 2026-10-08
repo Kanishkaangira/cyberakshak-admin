@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import EventForm from '../components/EventForm';
 import StatCards from '../components/StatCards';
 import { ConfirmDialog, RowMenu, StatusPill, useToast } from '../components/ui';
-import { createEvent, deleteEvent, listEvents, setEventStatus, updateEvent } from '../services/events';
+import { createEvent, deleteEvent, listEvents, sendEventPushNotification, setEventStatus, updateEvent } from '../services/events';
 import { fmtDateTime, normalizeImageUrl, timeUntil } from '../utils';
 
 const FILTERS = ['all', 'coming', 'ongoing', 'archived'];
@@ -65,16 +65,23 @@ export default function EventsPage() {
     );
   }, [events, filter, query]);
 
-  async function handleSave(form) {
+  async function handleSave(form, { sendNotification = false } = {}) {
     const isNew = editing === 'new';
-    await (isNew ? createEvent(form) : updateEvent(editing.id, form));
-    toast(
-      isNew
-        ? 'Event published. It will appear in the app.'
-        : 'Changes saved.'
-    );
+    const savedEvent = await (isNew ? createEvent(form) : updateEvent(editing.id, form));
     setEditing(null);
     load();
+    if (form.notify_app_users && (isNew || sendNotification)) {
+      try {
+        const result = await sendEventPushNotification(savedEvent.id);
+        toast(`Event saved and notification sent to ${result.sent_count} device(s).`);
+      } catch (err) {
+        toast(`Event saved, but notification failed: ${err.message || 'Could not send notification.'}`, 'error');
+      }
+    } else if (isNew) {
+      toast('Event published. It will appear in the app.');
+    } else {
+      toast('Changes saved.');
+    }
   }
 
   async function changeStatus(ev, status, message) {

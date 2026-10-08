@@ -12,8 +12,8 @@ Built with React + Vite (plain JS, no extra UI libraries). Uses only the public 
    ```sql
    UPDATE public.profiles SET role = 'admin' WHERE email = 'you@example.com';
    ```
-3. To save the admin's app-notification preference on each event, run `supabase/006_event_notification_preference.sql`.
-   This stores the preference only; push delivery will be connected after the mobile app and push provider are configured.
+3. Run `supabase/006_event_notification_preference.sql` to save the notification preference on events.
+4. Configure and deploy the secure FCM sender using [FCM_SETUP.md](./supabase/FCM_SETUP.md).
 
 ## 2. Run locally
 
@@ -35,7 +35,7 @@ Because the panel is public on the internet, access is protected by login + the 
 - Admin login (email + password), role-checked against `profiles.role`
 - Events list with status tabs, search, upcoming/past indicator
 - Create / edit in a slide-over with a **live preview of the app's event card**
-- Save whether an event should notify app users later (push delivery is not connected yet)
+- Send an FCM event push after creating an event when **Notify app users** is enabled; existing events can be saved and sent from their edit form
 - Banner image upload to Supabase Storage (or paste a link)
 - Publish, unpublish, archive, duplicate-as-draft, delete (with confirmation)
 - Activity log (writes to `admin_audit_log`)

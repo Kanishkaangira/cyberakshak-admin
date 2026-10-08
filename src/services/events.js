@@ -81,6 +81,34 @@ export async function createEvent(form) {
   return data;
 }
 
+export async function sendEventPushNotification(eventId) {
+  const { data, error } = await supabase.functions.invoke('send-event-push', {
+    body: { event_id: eventId },
+  });
+  if (error) {
+    if (error.context instanceof Response) {
+      const responseBody = await error.context.clone().json().catch(() => null);
+      if (typeof responseBody?.error === 'string') throw new Error(responseBody.error);
+    }
+    throw error;
+  }
+  if (!data || data.sent_count === undefined) {
+    throw new Error('The push service returned an invalid response.');
+  }
+  if (data.failed_count > 0) {
+    const details = Array.isArray(data.errors)
+      ? data.errors.map((message) => String(message)).join(' ')
+      : '';
+    throw new Error(
+      `Notification sent to ${data.sent_count} device(s), but failed for ${data.failed_count}.${details ? ` ${details}` : ''}`
+    );
+  }
+  if (data.sent_count === 0) {
+    throw new Error('The event was saved, but no app devices are registered for notifications yet.');
+  }
+  return data;
+}
+
 export async function updateEvent(id, form) {
   const { data, error } = await supabase.from('events').update(toRow(form)).eq('id', id).select().single();
   if (error) throw error;

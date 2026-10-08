@@ -46,6 +46,7 @@ export default function EventForm({ event, onSave, onClose }) {
   const [form, setForm] = useState(() => (event ? fromEvent(event) : blank()));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [saveAndSend, setSaveAndSend] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -84,19 +85,27 @@ export default function EventForm({ event, onSave, onClose }) {
     }
   }
 
-  async function submit(e) {
-    e.preventDefault();
+  async function saveEvent({ sendNotification = false } = {}) {
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length) return;
+
     setSaving(true);
+    setSaveAndSend(sendNotification);
     setSaveError('');
     try {
-      await onSave(form);
+      await onSave(form, { sendNotification });
     } catch (err) {
       setSaveError(err.message || 'Could not save the event.');
+    } finally {
       setSaving(false);
+      setSaveAndSend(false);
     }
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    await saveEvent();
   }
 
   return (
@@ -149,7 +158,10 @@ export default function EventForm({ event, onSave, onClose }) {
               </select>
             </Field>
 
-            <Field label="App notification" hint="Saves this preference for when push delivery is connected to the mobile app. No notification is sent yet.">
+            <Field
+              label="App notification"
+              hint="New events send after publishing. For an existing event, check this option and choose Save & send notification."
+            >
               <label className="notification-toggle">
                 <input
                   type="checkbox"
@@ -179,6 +191,16 @@ export default function EventForm({ event, onSave, onClose }) {
           <footer className="sheet-foot">
             {saveError && <span className="err grow">{saveError}</span>}
             <span className="grow" />
+            {event && form.notify_app_users && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => saveEvent({ sendNotification: true })}
+                disabled={saving || uploading}
+              >
+                {saving && saveAndSend ? 'Saving & sending…' : 'Save & send notification'}
+              </button>
+            )}
             <button type="button" className="btn" onClick={onClose} disabled={saving}>
               Cancel
             </button>
