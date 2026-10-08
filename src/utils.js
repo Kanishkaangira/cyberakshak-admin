@@ -31,11 +31,38 @@ export function normalizeImageUrl(url) {
     .replace(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/blob\/([^/]+)\/(.+)$/i, 'https://raw.githubusercontent.com/$1/$2/$3');
 }
 
+function eventDateDayDifference(iso) {
+  const eventDate = new Date(iso);
+  if (Number.isNaN(eventDate.getTime())) return null;
+
+  const dateParts = (date) => {
+    const parts = new Intl.DateTimeFormat('en', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    return Object.fromEntries(parts.map(({ type, value }) => [type, Number(value)]));
+  };
+  const eventParts = dateParts(eventDate);
+  const todayParts = dateParts(new Date());
+  const eventDay = Date.UTC(eventParts.year, eventParts.month - 1, eventParts.day);
+  const today = Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day);
+  return Math.round((eventDay - today) / 86400000);
+}
+
+export function statusFromStartDate(iso) {
+  const dayDifference = eventDateDayDifference(iso);
+  if (dayDifference === null) return null;
+  if (dayDifference > 0) return 'coming';
+  if (dayDifference === 0) return 'ongoing';
+  return 'archived';
+}
+
 export function timeUntil(iso) {
-  const diff = new Date(iso).getTime() - Date.now();
-  if (Number.isNaN(diff)) return '';
-  const days = Math.round(diff / 86400000);
-  if (diff < 0) return 'Past';
+  const days = eventDateDayDifference(iso);
+  if (days === null) return '';
+  if (days < 0) return 'Past';
   if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   return `In ${days} days`;

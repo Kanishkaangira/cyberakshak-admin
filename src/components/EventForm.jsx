@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import EventPreview from './EventPreview';
-import { DEFAULT_CATEGORIES, uploadEventImage } from '../services/events';
+import { DEFAULT_CATEGORIES, STATUSES, uploadEventImage } from '../services/events';
 import { isHttpUrl, toLocalInput } from '../utils';
 
 const blank = () => ({
@@ -12,7 +12,8 @@ const blank = () => ({
   image_url: '',
   category: 'Webinar',
   registration_url: '',
-  status: 'published',
+  status: 'coming',
+  notify_app_users: false,
 });
 
 function fromEvent(ev) {
@@ -25,7 +26,8 @@ function fromEvent(ev) {
     image_url: ev.image_url || '',
     category: ev.category || 'Webinar',
     registration_url: ev.registration_url || '',
-    status: ev.status || 'draft',
+    status: ev.status || 'coming',
+    notify_app_users: Boolean(ev.notify_app_users),
   };
 }
 
@@ -40,7 +42,7 @@ function validate(f) {
   return e;
 }
 
-export default function EventForm({ event, categories, onSave, onClose }) {
+export default function EventForm({ event, onSave, onClose }) {
   const [form, setForm] = useState(() => (event ? fromEvent(event) : blank()));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -60,6 +62,10 @@ export default function EventForm({ event, categories, onSave, onClose }) {
   const set = (key) => (e) => {
     setForm((f) => ({ ...f, [key]: e.target.value }));
     if (errors[key]) setErrors((x) => ({ ...x, [key]: undefined }));
+  };
+
+  const setChecked = (key) => (e) => {
+    setForm((f) => ({ ...f, [key]: e.target.checked }));
   };
 
   async function onPickFile(e) {
@@ -92,8 +98,6 @@ export default function EventForm({ event, categories, onSave, onClose }) {
       setSaving(false);
     }
   }
-
-  const cats = Array.from(new Set([...DEFAULT_CATEGORIES, ...categories]));
 
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && !saving && onClose()}>
@@ -128,15 +132,33 @@ export default function EventForm({ event, categories, onSave, onClose }) {
               <Field label="Venue / mode">
                 <input value={form.location} onChange={set('location')} placeholder="Online (Zoom), Campus Auditorium…" />
               </Field>
-              <Field label="Category" hint="Pick one or type a new one. The app builds its filter chips from these.">
-                <input list="category-list" value={form.category} onChange={set('category')} />
-                <datalist id="category-list">
-                  {cats.map((c) => (
-                    <option key={c} value={c} />
+              <Field label="Category">
+                <select value={form.category} onChange={set('category')}>
+                  {DEFAULT_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>{category}</option>
                   ))}
-                </datalist>
+                </select>
               </Field>
             </div>
+
+            <Field label="Status">
+              <select value={form.status} onChange={set('status')}>
+                {STATUSES.map((status) => (
+                  <option key={status} value={status}>{status[0].toUpperCase() + status.slice(1)}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="App notification" hint="Saves this preference for when push delivery is connected to the mobile app. No notification is sent yet.">
+              <label className="notification-toggle">
+                <input
+                  type="checkbox"
+                  checked={form.notify_app_users}
+                  onChange={setChecked('notify_app_users')}
+                />
+                <span>Notify app users about this event</span>
+              </label>
+            </Field>
 
             <Field label="Banner image" error={errors.image_url || uploadError}>
               <div className="image-row">
@@ -171,6 +193,17 @@ export default function EventForm({ event, categories, onSave, onClose }) {
           <EventPreview form={form} />
         </aside>
       </div>
+    </div>
+  );
+}
+
+function Field({ label, error, hint, children }) {
+  return (
+    <div className={`field${error ? ' has-error' : ''}`}>
+      <span className="label">{label}</span>
+      {children}
+      {error && <span className="err">{error}</span>}
+      {hint && <span className="hint">{hint}</span>}
     </div>
   );
 }

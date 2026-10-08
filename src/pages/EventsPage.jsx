@@ -2,10 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import EventForm from '../components/EventForm';
 import StatCards from '../components/StatCards';
 import { ConfirmDialog, RowMenu, StatusPill, useToast } from '../components/ui';
-import { createEvent, deleteEvent, duplicateEvent, listEvents, setEventStatus, updateEvent } from '../services/events';
+import { createEvent, deleteEvent, listEvents, setEventStatus, updateEvent } from '../services/events';
 import { fmtDateTime, normalizeImageUrl, timeUntil } from '../utils';
 
 const FILTERS = ['all', 'coming', 'ongoing', 'archived'];
+
+function dateSearchValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 export default function EventsPage() {
   const toast = useToast();
@@ -38,14 +46,22 @@ export default function EventsPage() {
     return c;
   }, [events]);
 
-  const categories = useMemo(() => Array.from(new Set(events.map((e) => e.category).filter(Boolean))), [events]);
-
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return events.filter(
       (e) =>
         (filter === 'all' || e.status === filter) &&
-        (!q || [e.title, e.location, e.category].some((v) => (v || '').toLowerCase().includes(q)))
+        (!q ||
+          [
+            e.title,
+            e.location,
+            e.category,
+            e.status,
+            fmtDateTime(e.starts_at),
+            fmtDateTime(e.ends_at),
+            dateSearchValue(e.starts_at),
+            dateSearchValue(e.ends_at),
+          ].some((value) => (value || '').toLowerCase().includes(q)))
     );
   }, [events, filter, query]);
 
@@ -68,16 +84,6 @@ export default function EventsPage() {
       load();
     } catch (err) {
       toast(err.message || 'Could not update status.', 'error');
-    }
-  }
-
-  async function copy(ev) {
-    try {
-      await duplicateEvent(ev);
-      toast('Event duplicated.');
-      load();
-    } catch (err) {
-      toast(err.message || 'Could not duplicate.', 'error');
     }
   }
 
@@ -120,7 +126,7 @@ export default function EventsPage() {
             </button>
           ))}
         </div>
-        <input className="search" type="search" placeholder="Search title, venue, category" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search events" />
+        <input className="search" type="search" placeholder="Search title, venue, category, date, or status" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search events by title, venue, category, date, or status" />
       </div>
 
       {loading ? (
@@ -166,10 +172,8 @@ export default function EventsPage() {
                 <RowMenu
                   items={[
                     { key: 'edit', label: 'Edit', onClick: () => setEditing(ev) },
-                    { key: 'dup', label: 'Duplicate', onClick: () => copy(ev) },
-                    { key: 'd1', divider: true },
                     { key: 'del', label: 'Delete…', danger: true, onClick: () => setConfirm({ event: ev }) },
-                  ].filter(Boolean)}
+                  ]}
                 />
               </li>
             );
@@ -178,7 +182,7 @@ export default function EventsPage() {
       )}
 
       {editing && (
-        <EventForm event={editing === 'new' ? null : editing} categories={categories} onSave={handleSave} onClose={() => setEditing(null)} />
+        <EventForm event={editing === 'new' ? null : editing} onSave={handleSave} onClose={() => setEditing(null)} />
       )}
 
       {confirm && (

@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient';
+import { statusFromStartDate } from '../utils';
 
 export const STATUSES = ['coming', 'ongoing', 'archived'];
 
@@ -11,8 +12,8 @@ export function statusFromDates(startsAt, endsAt) {
   if (end >= now) return 'ongoing';
   return 'archived';
 }
-export const DEFAULT_CATEGORIES = ['Webinar', 'Seminar', 'Workshop'];
-export const IMAGE_BUCKET = 'event-images';
+export const DEFAULT_CATEGORIES = ['Seminar', 'Workshop', 'Webinar'];
+export const IMAGE_BUCKET = 'Events';
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -22,6 +23,30 @@ export async function listEvents() {
     .select('*, created_by_profile:profiles(full_name, email)')
     .order('starts_at', { ascending: false });
   if (error) throw error;
+
+  const updates = new Map();
+  data.forEach((event) => {
+    const expectedStatus = statusFromStartDate(event.starts_at);
+    if (expectedStatus && expectedStatus !== event.status) {
+      const ids = updates.get(expectedStatus) || [];
+      ids.push(event.id);
+      updates.set(expectedStatus, ids);
+      event.status = expectedStatus;
+    }
+  });
+
+  for (const [status, ids] of updates) {
+    const { data: updatedEvents, error: updateError } = await supabase
+      .from('events')
+      .update({ status })
+      .in('id', ids)
+      .select('id');
+    if (updateError) throw updateError;
+    if (updatedEvents.length !== ids.length) {
+      throw new Error('Could not synchronize event statuses. Check the admin update permissions.');
+    }
+  }
+
   return data;
 }
 
@@ -40,7 +65,8 @@ function toRow(form) {
     image_url: clean(form.image_url),
     category: clean(form.category) || 'Webinar',
     registration_url: clean(form.registration_url),
-    status: statusFromDates(form.starts_at, form.ends_at || null),
+    status: form.status,
+    notify_app_users: Boolean(form.notify_app_users),
   };
 }
 
@@ -73,30 +99,6 @@ export async function deleteEvent(event) {
   if (count === 0) throw new Error('Nothing was deleted. Check that your account has the admin role.');
 }
 
-export async function duplicateEvent(event) {
-  const { data: userData } = await supabase.auth.getUser();
-  const { data, error } = await supabase
-    .from('events')
-    .insert([
-      {
-        title: `${event.title} (copy)`,
-        description: event.description,
-        starts_at: event.starts_at,
-        ends_at: event.ends_at,
-        location: event.location,
-        image_url: event.image_url,
-        category: event.category,
-        registration_url: event.registration_url,
-        status: statusFromDates(event.starts_at, event.ends_at),
-        created_by: userData.user.id,
-      },
-    ])
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
 /** Uploads a banner to Supabase Storage and returns its public URL. */
 export async function uploadEventImage(file) {
   if (!ALLOWED_IMAGE_TYPES.includes(file.type)) throw new Error('Use a JPG, PNG or WebP image.');
@@ -110,7 +112,10 @@ export async function uploadEventImage(file) {
     .upload(path, file, { cacheControl: '31536000', contentType: file.type, upsert: false });
   if (error) {
     if (/bucket not found/i.test(error.message)) {
-      throw new Error('Storage bucket "event-images" is missing. Run supabase/002_admin_panel.sql first.');
+      throw new Error('Storage bucket "Events" is missing. Run supabase/004_event_image_storage.sql first.');
+    }
+    if (error.code === '42501' || /row-level security/i.test(error.message)) {
+      throw new Error('Supabase Storage blocked this upload. Run supabase/004_event_image_storage.sql in the Supabase SQL Editor, then try again while signed in as an admin.');
     }
     throw error;
   }
