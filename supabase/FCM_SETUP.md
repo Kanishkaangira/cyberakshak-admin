@@ -7,6 +7,9 @@ against `public.admins`, checks the event preference, reads device tokens from
 `public.device_tokens`, and sends an FCM HTTP v1 notification containing
 `type: "event"` and `event_id`. It also saves successful broadcasts in
 `public.notifications`, which the mobile app displays in its Notifications inbox.
+Pushes use the event banner image when available, a branded icon/color, a
+high-visibility Android channel, and include the event date and venue in the
+notification text.
 
 The mobile app's Android Firebase project is `cyberakshak-d71e9`. The Android
 `google-services.json` file configures the client app; it does **not** contain

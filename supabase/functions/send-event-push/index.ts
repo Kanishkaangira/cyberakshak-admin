@@ -14,6 +14,10 @@ type EventRow = {
   id: string;
   title: string;
   description: string | null;
+  image_url: string | null;
+  starts_at: string;
+  location: string | null;
+  category: string | null;
   notify_app_users: boolean;
 };
 
@@ -98,7 +102,8 @@ async function databaseRequest(path: string, serviceRoleKey: string, init?: Requ
       ...(init?.headers || {}),
     },
   });
-  const result = await response.json();
+  const responseBody = await response.text();
+  const result = responseBody ? JSON.parse(responseBody) : null;
   if (!response.ok) {
     throw new Error('Could not read the notification data from Supabase.');
   }
@@ -148,7 +153,7 @@ Deno.serve(async (request) => {
     }
 
     const events = await databaseRequest(
-      `events?select=id,title,description,notify_app_users&id=eq.${encodeURIComponent(eventId)}&notify_app_users=eq.true`,
+      `events?select=id,title,description,image_url,starts_at,location,category,notify_app_users&id=eq.${encodeURIComponent(eventId)}&notify_app_users=eq.true`,
       serviceRoleKey,
     ) as EventRow[];
     const event = events[0];
@@ -168,7 +173,25 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'Firebase service account does not match FIREBASE_PROJECT_ID.' }, 500);
     }
     const accessToken = await getFirebaseAccessToken(account);
-    const messageBody = (event.description || 'A new event has been added.').slice(0, 240);
+    const eventDate = new Intl.DateTimeFormat('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Asia/Kolkata',
+    }).format(new Date(event.starts_at));
+    const eventDetails = [
+      event.category,
+      eventDate,
+      event.location,
+    ].filter(Boolean).join(' · ');
+    const messageBody = [
+      eventDetails,
+      event.description || 'A new cyber safety event has been added.',
+    ].filter(Boolean).join('\n').slice(0, 240);
+    const notificationData = {
+      type: 'event',
+      event_id: event.id,
+      event_image_url: event.image_url || '',
+    };
     const notificationRows = await databaseRequest(
       'notifications',
       serviceRoleKey,
@@ -183,7 +206,7 @@ Deno.serve(async (request) => {
           body: messageBody,
           audience: 'all',
           targeting: {},
-          data: { type: 'event', event_id: event.id },
+          data: notificationData,
           created_by: user.id,
         }),
       },
@@ -213,7 +236,18 @@ Deno.serve(async (request) => {
                 message: {
                   token,
                   notification: { title: event.title, body: messageBody },
-                  data: { type: 'event', event_id: event.id },
+                  data: notificationData,
+                  android: {
+                    priority: 'HIGH',
+                    notification: {
+                      channel_id: 'event-updates-v2',
+                      icon: 'ic_notification',
+                      color: '#4B4FE0',
+                      sound: 'default',
+                      default_vibrate_timings: true,
+                      ...(event.image_url ? { image: event.image_url } : {}),
+                    },
+                  },
                 },
               }),
             },
@@ -252,6 +286,7 @@ Deno.serve(async (request) => {
             data: {
               type: 'event',
               event_id: event.id,
+              event_image_url: event.image_url || '',
               sent_count: sentCount,
               failed_count: failedCount,
             },
