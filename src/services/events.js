@@ -81,9 +81,9 @@ export async function createEvent(form) {
   return data;
 }
 
-export async function sendEventPushNotification(eventId) {
+async function sendPushNotification(body, context, { allowPartialDelivery = false } = {}) {
   const { data, error } = await supabase.functions.invoke('send-event-push', {
-    body: { event_id: eventId },
+    body,
   });
   if (error) {
     if (error.context instanceof Response) {
@@ -92,10 +92,18 @@ export async function sendEventPushNotification(eventId) {
     }
     throw error;
   }
-  if (!data || data.sent_count === undefined) {
+  if (!data || typeof data.sent_count !== 'number' || typeof data.failed_count !== 'number') {
     throw new Error('The push service returned an invalid response.');
   }
-  if (data.failed_count > 0) {
+  if (data.sent_count === 0 && data.failed_count > 0) {
+    const details = Array.isArray(data.errors)
+      ? data.errors.map((message) => String(message)).join(' ')
+      : '';
+    throw new Error(
+      `Could not send the notification to any devices. ${data.failed_count} device(s) failed.${details ? ` ${details}` : ''}`
+    );
+  }
+  if (data.failed_count > 0 && !allowPartialDelivery) {
     const details = Array.isArray(data.errors)
       ? data.errors.map((message) => String(message)).join(' ')
       : '';
@@ -104,9 +112,21 @@ export async function sendEventPushNotification(eventId) {
     );
   }
   if (data.sent_count === 0) {
-    throw new Error('The event was saved, but no app devices are registered for notifications yet.');
+    throw new Error(`No app devices are registered to receive this ${context} notification.`);
   }
   return data;
+}
+
+export function sendEventPushNotification(eventId) {
+  return sendPushNotification({ event_id: eventId }, 'event');
+}
+
+export function sendManualPushNotification({ title, body }) {
+  return sendPushNotification(
+    { type: 'announcement', title, body },
+    'manual',
+    { allowPartialDelivery: true }
+  );
 }
 
 export async function updateEvent(id, form) {
