@@ -8,6 +8,7 @@ export default function ManualNotificationForm({ onSend, onClose }) {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [delivery, setDelivery] = useState(null);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -22,8 +23,7 @@ export default function ManualNotificationForm({ onSend, onClose }) {
     setError('');
     setBusy(true);
     try {
-      await onSend({ title: title.trim(), body: body.trim() });
-      onClose();
+      setDelivery(await onSend({ title: title.trim(), body: body.trim() }));
     } catch (sendError) {
       setError(sendError.message || 'Could not send the notification.');
     } finally {
@@ -65,48 +65,82 @@ export default function ManualNotificationForm({ onSend, onClose }) {
         </header>
 
         <form onSubmit={submit}>
-          <label className="field">
-            <span className="label">Notification title</span>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              maxLength={MAX_TITLE_LENGTH}
-              placeholder="e.g. New app update"
-              required
-              autoFocus
-            />
-            <span className="hint notification-counter">{title.length}/{MAX_TITLE_LENGTH}</span>
-          </label>
-          <label className="field">
-            <span className="label">Message</span>
-            <textarea
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-              maxLength={MAX_BODY_LENGTH}
-              rows={5}
-              placeholder="Share an update, reminder, or important information…"
-              required
-            />
-            <span className="hint notification-counter">{body.length}/{MAX_BODY_LENGTH}</span>
-          </label>
+          {delivery ? (
+            <div className={`notification-result${delivery.failed_count > 0 ? ' partial' : ''}`} role="status">
+              <span className="notification-result-icon" aria-hidden="true">
+                {delivery.failed_count > 0 ? '!' : '✓'}
+              </span>
+              <div>
+                <strong>
+                  {delivery.failed_count > 0 ? 'Notification partially sent' : 'Notification sent'}
+                </strong>
+                <p>
+                  Sent to {delivery.sent_count} {delivery.sent_count === 1 ? 'device' : 'devices'}.
+                  {delivery.failed_count > 0 &&
+                    ` ${delivery.failed_count} ${delivery.failed_count === 1 ? 'device was' : 'devices were'} not reached.`}
+                </p>
+                {delivery.failed_count > 0 && delivery.errors?.length > 0 && (
+                  <p className="notification-result-details">{delivery.errors.join(' ')}</p>
+                )}
+                {delivery.warning && (
+                  <p className="notification-result-details">{delivery.warning}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <label className="field">
+                <span className="label">Notification title</span>
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  maxLength={MAX_TITLE_LENGTH}
+                  placeholder="e.g. New app update"
+                  required
+                  autoFocus
+                />
+                <span className="hint notification-counter">{title.length}/{MAX_TITLE_LENGTH}</span>
+              </label>
+              <label className="field">
+                <span className="label">Message</span>
+                <textarea
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
+                  maxLength={MAX_BODY_LENGTH}
+                  rows={5}
+                  placeholder="Share an update, reminder, or important information…"
+                  required
+                />
+                <span className="hint notification-counter">{body.length}/{MAX_BODY_LENGTH}</span>
+              </label>
 
-          <div className="notification-delivery-note">
-            <span aria-hidden="true">ⓘ</span>
-            This message will be sent to registered app devices and appear in the app’s Notifications list.
-          </div>
-          {error && <div className="banner error" role="alert">{error}</div>}
+              <div className="notification-delivery-note">
+                <span aria-hidden="true">ⓘ</span>
+                This message will be sent to registered app devices and appear in the app’s Notifications list.
+              </div>
+              {error && <div className="banner error" role="alert">{error}</div>}
+            </>
+          )}
 
           <footer className="notification-dialog-actions">
-            <button type="button" className="btn" onClick={onClose} disabled={busy}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={busy || !title.trim() || !body.trim()}
-            >
-              {busy ? 'Sending…' : 'Send to app users'}
-            </button>
+            {delivery ? (
+              <button type="button" className="btn notification-done" onClick={onClose} autoFocus>
+                Done
+              </button>
+            ) : (
+              <>
+                <button type="button" className="btn" onClick={onClose} disabled={busy}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn primary"
+                  disabled={busy || !title.trim() || !body.trim()}
+                >
+                  {busy ? 'Sending…' : 'Send to app users'}
+                </button>
+              </>
+            )}
           </footer>
         </form>
       </section>

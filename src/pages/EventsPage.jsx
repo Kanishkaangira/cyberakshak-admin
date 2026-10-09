@@ -88,9 +88,7 @@ export default function EventsPage() {
   }
 
   async function handleManualNotification(notification) {
-    const result = await sendManualPushNotification(notification);
-    const deliveryMessage = `Notification sent to ${result.sent_count} device(s).`;
-    toast(result.warning ? `${deliveryMessage} ${result.warning}` : deliveryMessage);
+    return sendManualPushNotification(notification);
   }
 
   async function changeStatus(ev, status, message) {
