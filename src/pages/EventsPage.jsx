@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import EventForm from '../components/EventForm';
+import ManualNotificationForm from '../components/ManualNotificationForm';
 import StatCards from '../components/StatCards';
 import { ConfirmDialog, RowMenu, StatusPill, useToast } from '../components/ui';
-import { createEvent, deleteEvent, listEvents, sendEventPushNotification, setEventStatus, updateEvent } from '../services/events';
+import { createEvent, deleteEvent, listEvents, sendEventPushNotification, sendManualPushNotification, setEventStatus, updateEvent } from '../services/events';
 import { fmtDateTime, normalizeImageUrl, timeUntil } from '../utils';
 
 const FILTERS = ['all', 'coming', 'ongoing', 'archived'];
@@ -23,6 +24,7 @@ export default function EventsPage() {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState(null); // null | 'new' | event
+  const [manualNotificationOpen, setManualNotificationOpen] = useState(false);
   const [confirm, setConfirm] = useState(null); // { event }
   const [busy, setBusy] = useState(false);
 
@@ -73,7 +75,8 @@ export default function EventsPage() {
     if (form.notify_app_users && (isNew || sendNotification)) {
       try {
         const result = await sendEventPushNotification(savedEvent.id);
-        toast(`Event saved and notification sent to ${result.sent_count} device(s).`);
+        const deliveryMessage = `Event saved and notification sent to ${result.sent_count} device(s).`;
+        toast(result.warning ? `${deliveryMessage} ${result.warning}` : deliveryMessage);
       } catch (err) {
         toast(`Event saved, but notification failed: ${err.message || 'Could not send notification.'}`, 'error');
       }
@@ -82,6 +85,12 @@ export default function EventsPage() {
     } else {
       toast('Changes saved.');
     }
+  }
+
+  async function handleManualNotification(notification) {
+    const result = await sendManualPushNotification(notification);
+    const deliveryMessage = `Notification sent to ${result.sent_count} device(s).`;
+    toast(result.warning ? `${deliveryMessage} ${result.warning}` : deliveryMessage);
   }
 
   async function changeStatus(ev, status, message) {
@@ -117,9 +126,18 @@ export default function EventsPage() {
             {counts.coming} coming · {counts.ongoing} ongoing · {counts.archived} archived
           </p>
         </div>
-        <button className="btn primary" onClick={() => setEditing('new')}>
-          + New event
-        </button>
+        <div className="page-head-actions">
+          <button className="btn notification-action" onClick={() => setManualNotificationOpen(true)}>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
+              <path d="M10 21h4" />
+            </svg>
+            Send notification
+          </button>
+          <button className="btn primary" onClick={() => setEditing('new')}>
+            + New event
+          </button>
+        </div>
       </header>
 
       <StatCards events={events} counts={counts} />
@@ -190,6 +208,13 @@ export default function EventsPage() {
 
       {editing && (
         <EventForm event={editing === 'new' ? null : editing} onSave={handleSave} onClose={() => setEditing(null)} />
+      )}
+
+      {manualNotificationOpen && (
+        <ManualNotificationForm
+          onSend={handleManualNotification}
+          onClose={() => setManualNotificationOpen(false)}
+        />
       )}
 
       {confirm && (

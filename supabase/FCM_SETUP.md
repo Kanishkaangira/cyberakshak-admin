@@ -49,3 +49,10 @@ registered, the admin reports that explicitly. The mobile app must be freshly
 installed with notifications allowed and have a token in `public.device_tokens`.
 The inbox is opened by tapping the notification bell on the home screen; it
 shows successful sends even after a push banner has been dismissed.
+
+## Send a manual app announcement
+
+In the admin panel, choose **Send notification**, enter a title and message,
+and send it to all registered app devices. Successful sends are saved to
+`public.notifications` with `audience = 'all'` and appear in the app's
+Notifications list.

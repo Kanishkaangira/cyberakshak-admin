@@ -128,9 +128,9 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const { event_id: eventId } = await request.json();
-    if (typeof eventId !== 'string' || !/^[0-9a-f-]{36}$/i.test(eventId)) {
-      return jsonResponse({ error: 'A valid event ID is required.' }, 400);
+    const payload: Record<string, unknown> = await request.json();
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return jsonResponse({ error: 'A valid notification request is required.' }, 400);
     }
 
     const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -149,16 +149,63 @@ Deno.serve(async (request) => {
       serviceRoleKey,
     );
     if (!Array.isArray(admins) || admins.length !== 1) {
-      return jsonResponse({ error: 'Only administrators can send event notifications.' }, 403);
+      return jsonResponse({ error: 'Only administrators can send notifications.' }, 403);
     }
 
-    const events = await databaseRequest(
-      `events?select=id,title,description,image_url,starts_at,location,category,notify_app_users&id=eq.${encodeURIComponent(eventId)}&notify_app_users=eq.true`,
-      serviceRoleKey,
-    ) as EventRow[];
-    const event = events[0];
-    if (!event) {
-      return jsonResponse({ error: 'Event not found or notifications are not enabled for it.' }, 404);
+    let notificationTitle: string;
+    let messageBody: string;
+    let notificationData: Record<string, string>;
+    let imageUrl: string | null = null;
+
+    if (typeof payload.event_id === 'string') {
+      const eventId = payload.event_id;
+      if (!/^[0-9a-f-]{36}$/i.test(eventId)) {
+        return jsonResponse({ error: 'A valid event ID is required.' }, 400);
+      }
+      const events = await databaseRequest(
+        `events?select=id,title,description,image_url,starts_at,location,category,notify_app_users&id=eq.${encodeURIComponent(eventId)}&notify_app_users=eq.true`,
+        serviceRoleKey,
+      ) as EventRow[];
+      const event = events[0];
+      if (!event) {
+        return jsonResponse({ error: 'Event not found or notifications are not enabled for it.' }, 404);
+      }
+
+      notificationTitle = event.title;
+      imageUrl = event.image_url;
+      const eventDate = new Intl.DateTimeFormat('en-IN', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Asia/Kolkata',
+      }).format(new Date(event.starts_at));
+      const eventDetails = [event.category, eventDate, event.location].filter(Boolean).join(' · ');
+      messageBody = [eventDetails, event.description || 'A new cyber safety event has been added.']
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 240);
+      notificationData = {
+        type: 'event',
+        event_id: event.id,
+        event_image_url: event.image_url || '',
+      };
+    } else if (payload.type === 'announcement') {
+      if (typeof payload.title !== 'string' || typeof payload.body !== 'string') {
+        return jsonResponse({ error: 'A notification title and message are required.' }, 400);
+      }
+      notificationTitle = payload.title.trim();
+      messageBody = payload.body.trim();
+      if (!notificationTitle || notificationTitle.length > 120) {
+        return jsonResponse({ error: 'The notification title must be between 1 and 120 characters.' }, 400);
+      }
+      if (!messageBody || messageBody.length > 2000) {
+        return jsonResponse({ error: 'The notification message must be between 1 and 2000 characters.' }, 400);
+      }
+      if (new TextEncoder().encode(`${notificationTitle}${messageBody}`).length > 3500) {
+        return jsonResponse({ error: 'The notification is too large. Shorten the title or message and try again.' }, 400);
+      }
+      notificationData = { type: 'announcement' };
+    } else {
+      return jsonResponse({ error: 'Choose an event notification or a manual announcement.' }, 400);
     }
 
     const tokens = await databaseRequest(
@@ -173,49 +220,6 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'Firebase service account does not match FIREBASE_PROJECT_ID.' }, 500);
     }
     const accessToken = await getFirebaseAccessToken(account);
-    const eventDate = new Intl.DateTimeFormat('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      timeZone: 'Asia/Kolkata',
-    }).format(new Date(event.starts_at));
-    const eventDetails = [
-      event.category,
-      eventDate,
-      event.location,
-    ].filter(Boolean).join(' · ');
-    const messageBody = [
-      eventDetails,
-      event.description || 'A new cyber safety event has been added.',
-    ].filter(Boolean).join('\n').slice(0, 240);
-    const notificationData = {
-      type: 'event',
-      event_id: event.id,
-      event_image_url: event.image_url || '',
-    };
-    const notificationRows = await databaseRequest(
-      'notifications',
-      serviceRoleKey,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation',
-        },
-        body: JSON.stringify({
-          title: event.title,
-          body: messageBody,
-          audience: 'all',
-          targeting: {},
-          data: notificationData,
-          created_by: user.id,
-        }),
-      },
-    ) as { id: string }[];
-    const notificationId = notificationRows[0]?.id;
-    if (!notificationId) {
-      throw new Error('Could not save the notification to the app inbox.');
-    }
-
     let sentCount = 0;
     let failedCount = 0;
     const deliveryErrors: string[] = [];
@@ -235,7 +239,7 @@ Deno.serve(async (request) => {
               body: JSON.stringify({
                 message: {
                   token,
-                  notification: { title: event.title, body: messageBody },
+                  notification: { title: notificationTitle, body: messageBody },
                   data: notificationData,
                   android: {
                     priority: 'HIGH',
@@ -245,7 +249,7 @@ Deno.serve(async (request) => {
                       color: '#4B4FE0',
                       sound: 'default',
                       default_vibrate_timings: true,
-                      ...(event.image_url ? { image: event.image_url } : {}),
+                      ...(imageUrl ? { image: imageUrl } : {}),
                     },
                   },
                 },
@@ -271,34 +275,43 @@ Deno.serve(async (request) => {
       );
     }
 
-    if (sentCount > 0) {
+    let inboxWarning: string | undefined;
+    try {
       await databaseRequest(
-        `notifications?id=eq.${encodeURIComponent(notificationId)}`,
+        'notifications',
         serviceRoleKey,
         {
-          method: 'PATCH',
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Prefer: 'return=minimal',
           },
           body: JSON.stringify({
-            sent_at: new Date().toISOString(),
+            title: notificationTitle,
+            body: messageBody,
+            audience: 'all',
+            targeting: {},
+            sent_at: sentCount > 0 ? new Date().toISOString() : null,
             data: {
-              type: 'event',
-              event_id: event.id,
-              event_image_url: event.image_url || '',
+              ...notificationData,
               sent_count: sentCount,
               failed_count: failedCount,
+              ...(imageUrl ? { event_image_url: imageUrl } : {}),
             },
+            created_by: user.id,
           }),
         },
       );
+    } catch (error) {
+      console.error('[send-event-push] Push completed, but the notification inbox record could not be saved.');
+      inboxWarning = 'The push delivery was attempted, but the notification could not be saved to the app inbox.';
     }
 
     return jsonResponse({
       sent_count: sentCount,
       failed_count: failedCount,
       errors: [...new Set(deliveryErrors)].slice(0, 5),
+      ...(inboxWarning ? { warning: inboxWarning } : {}),
     });
   } catch (error) {
     console.error('[send-event-push] Delivery failed.');
