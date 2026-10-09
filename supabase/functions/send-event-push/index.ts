@@ -126,6 +126,10 @@ Deno.serve(async (request) => {
   if (!authorization?.startsWith('Bearer ')) {
     return jsonResponse({ error: 'Sign in as an administrator to send notifications.' }, 401);
   }
+  const clientApiKey = request.headers.get('apikey');
+  if (!clientApiKey) {
+    return jsonResponse({ error: 'Could not verify your administrator session. Sign in again.' }, 401);
+  }
 
   try {
     const payload: Record<string, unknown> = await request.json();
@@ -135,11 +139,12 @@ Deno.serve(async (request) => {
 
     const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: {
-        apikey: serviceRoleKey,
+        apikey: clientApiKey,
         Authorization: authorization,
       },
     });
     if (!userResponse.ok) {
+      console.error('[send-event-push] Auth rejected the caller token:', userResponse.status);
       return jsonResponse({ error: 'Your session is invalid or expired. Sign in again.' }, 401);
     }
     const user = await userResponse.json();
